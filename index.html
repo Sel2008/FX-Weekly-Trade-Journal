@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FX Weekly Trade Journal</title>
+<style>
+  :root{
+    --bg:#0b1020; --card:#121a2b; --card2:#182238; --text:#eef3ff;
+    --muted:#9aa8c3; --line:#2a3854; --accent:#7c9cff; --good:#55d69b;
+    --bad:#ff6b7a; --warn:#ffd166; --white:#fff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#090e1a,#0e1526);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  .wrap{max-width:1100px;margin:auto;padding:18px}
+  header{padding:18px 0 8px}
+  h1{font-size:28px;margin:0 0 6px}
+  h2{font-size:20px;margin:0 0 14px}
+  h3{font-size:16px;margin:0 0 8px}
+  p{color:var(--muted);line-height:1.5}
+  .sub{margin:0}
+  .tabs{display:flex;gap:8px;overflow:auto;margin:18px 0}
+  .tab{border:1px solid var(--line);background:var(--card);color:var(--muted);padding:10px 14px;border-radius:12px;cursor:pointer;white-space:nowrap}
+  .tab.active{background:var(--accent);color:#071022;border-color:var(--accent);font-weight:700}
+  .page{display:none}.page.active{display:block}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  .card{background:rgba(18,26,43,.95);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 8px 28px rgba(0,0,0,.16)}
+  label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+  input,select,textarea{width:100%;background:#0b1324;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:11px;font:inherit}
+  textarea{min-height:100px;resize:vertical}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  button{border:0;border-radius:10px;padding:11px 14px;font-weight:700;cursor:pointer}
+  .primary{background:var(--accent);color:#071022}.secondary{background:var(--card2);color:var(--text);border:1px solid var(--line)}
+  .danger{background:#54202a;color:#ffdce0}
+  .score{font-size:34px;font-weight:800}
+  .grade{font-weight:800;font-size:18px}
+  .pill{display:inline-block;padding:5px 9px;border-radius:999px;background:var(--card2);font-size:12px;margin:3px}
+  .win{color:var(--good)} .loss{color:var(--bad)} .warn{color:var(--warn)}
+  .trade-card{display:grid;grid-template-columns:150px 1fr;gap:14px;align-items:start}
+  .thumb{width:150px;height:110px;border-radius:10px;border:1px solid var(--line);object-fit:cover;background:#0b1324}
+  .empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}
+  .metric{font-size:26px;font-weight:800}.metric small{font-size:12px;color:var(--muted);font-weight:500}
+  .bar{height:10px;background:#0b1324;border-radius:999px;overflow:hidden}.bar>span{display:block;height:100%;background:var(--accent)}
+  .check{display:flex;gap:8px;align-items:center;margin:8px 0;color:var(--text);font-size:13px}
+  .check input{width:auto}
+  .hint{font-size:12px;color:var(--muted)}
+  .footer{color:#7786a4;font-size:11px;text-align:center;padding:20px}
+  @media(max-width:700px){.grid,.grid3{grid-template-columns:1fr}.trade-card{grid-template-columns:1fr}.thumb{width:100%;height:180px}}
+</style>
+
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="./icon-192.png">
+  <style>
+    body { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+    .install-card { display:none; }
+    .install-card.show { display:block; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>📈 FX Weekly Trade Journal</h1>
+  <p class="sub">Post your trade screenshots during the week. On the weekend, score every trade using your A+ model and review the week.</p>
+</header>
+
+
+  <div class="card install-card" id="installCard">
+    <h2>📱 Install on your phone</h2>
+    <p>Add FX Weekly Trade Journal to your Android home screen so you can open it like a normal app.</p>
+    <button class="primary" id="installBtn">Install App</button>
+    <p class="hint" id="installHint"></p>
+  </div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showPage('log',this)">➕ Log Trade</button>
+  <button class="tab" onclick="showPage('week',this)">📋 This Week</button>
+  <button class="tab" onclick="showPage('review',this)">🧠 Weekend Review</button>
+  <button class="tab" onclick="showPage('rules',this)">📐 A+ Rules</button>
+</div>
+
+<section id="log" class="page active">
+  <div class="card">
+    <h2>Log a trade</h2>
+    <div class="grid">
+      <div><label>Date</label><input id="date" type="date"></div>
+      <div><label>Pair</label><input id="pair" placeholder="e.g. AUDUSD"></div>
+      <div><label>Direction</label><select id="direction"><option>Long</option><option>Short</option></select></div>
+      <div><label>Entry timeframe</label><select id="tf"><option>15M</option><option>1H</option><option>4H</option><option>1D</option></select></div>
+      <div><label>Result (R)</label><input id="result" type="number" step="0.1" placeholder="e.g. 2 or -1"></div>
+      <div><label>Session</label><select id="session"><option>London</option><option>New York</option><option>Asia</option><option>London + NY</option><option>Other</option></select></div>
+    </div>
+    <div style="margin-top:14px"><label>Trade screenshot</label><input id="image" type="file" accept="image/*"></div>
+    <div style="margin-top:14px"><label>What did you see?</label><textarea id="notes" placeholder="HTF level, compression, rejection, displacement, retest, reason for entry, anything you noticed..."></textarea></div>
+    <div style="margin-top:14px">
+      <h3>Quick setup checklist</h3>
+      <label class="check"><input type="checkbox" id="htf"> Meaningful 4H/1D level</label>
+      <label class="check"><input type="checkbox" id="structure"> Clean structure / compression</label>
+      <label class="check"><input type="checkbox" id="reaction"> Clear reaction / rejection</label>
+      <label class="check"><input type="checkbox" id="displacement"> Strong displacement</label>
+      <label class="check"><input type="checkbox" id="retest"> Clean retest / entry</label>
+      <label class="check"><input type="checkbox" id="rr"> At least 1.5R, preferably 2R+</label>
+      <label class="check"><input type="checkbox" id="context"> Good market context</label>
+      <label class="check"><input type="checkbox" id="execution"> Clear execution / no chasing</label>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button class="primary" onclick="saveTrade()">Save Trade</button>
+      <button class="secondary" onclick="clearForm()">Clear</button>
+    </div>
+    <p class="hint">The app stores your journal in this browser using local storage. Keep your original screenshots elsewhere too.</p>
+  </div>
+</section>
+
+<section id="week" class="page">
+  <div class="grid3">
+    <div class="card"><div class="metric" id="mTrades">0</div><small>Trades</small></div>
+    <div class="card"><div class="metric" id="mWins">0</div><small>Wins</small></div>
+    <div class="card"><div class="metric" id="mR">0R</div><small>Net R</small></div>
+  </div>
+  <div class="card">
+    <h2>Week's trades</h2>
+    <div id="tradeList"></div>
+  </div>
+</section>
+
+<section id="review" class="page">
+  <div class="card">
+    <h2>Weekend scorecard</h2>
+    <p>Score each trade from the checklist. The target is not simply “did it win?” — it is whether you followed the process.</p>
+    <div id="reviewList"></div>
+  </div>
+  <div class="card">
+    <h2>Example weekly pie chart</h2>
+    <p>This starts as an illustrative example. Once you score your real trades, the chart updates to your actual A+/A/B/C distribution.</p>
+    <div style="max-width:520px;margin:auto">
+      <canvas id="pie" width="500" height="500"></canvas>
+    </div>
+    <p id="pieText" style="text-align:center"></p>
+  </div>
+  <div class="card">
+    <h2>Weekly verdict</h2>
+    <div id="verdict">Log trades and score them on the weekend to generate your review.</div>
+  </div>
+</section>
+
+<section id="rules" class="page">
+  <div class="card">
+    <h2>100-point A+ model</h2>
+    <p>Your corrected scorecard:</p>
+    <div class="grid">
+      <div><b>HTF location</b><br><span class="hint">4H/1D meaningful level — 20 pts</span></div>
+      <div><b>Structure</b><br><span class="hint">Compression / clean pattern — 15 pts</span></div>
+      <div><b>Reaction</b><br><span class="hint">Rejection / response at level — 20 pts</span></div>
+      <div><b>Displacement</b><br><span class="hint">Clear directional move — 15 pts</span></div>
+      <div><b>Retest / entry</b><br><span class="hint">Clean retest — 10 pts</span></div>
+      <div><b>Risk / reward</b><br><span class="hint">1.5R minimum, 2R+ preferred — 10 pts</span></div>
+      <div><b>Context</b><br><span class="hint">Market/session context — 5 pts</span></div>
+      <div><b>Execution / clarity</b><br><span class="hint">No chase, clean plan — 5 pts</span></div>
+    </div>
+    <hr style="border-color:var(--line);margin:18px 0">
+    <p><b>A+:</b> 85–100 &nbsp; <b>A:</b> 75–84 &nbsp; <b>B:</b> 65–74 &nbsp; <b>C:</b> below 65</p>
+    <p><b>Hard fails:</b> no meaningful HTF level, R:R below 1.5R, arbitrary stop, chasing after displacement, or entry based mainly on prediction.</p>
+    <p><b>Core model:</b> 4H/1D tells you WHERE. 1H/15M tells you WHEN.</p>
+    <p><b>Short:</b> resistance → compression → rejection → bearish displacement → retest → short → next support.</p>
+    <p><b>Long:</b> support → compression → rejection → bullish displacement → retest → long → next resistance.</p>
+    <p><b>Risk:</b> 0.5% per trade while validating the system; max 2 losing trades/day; never widen the stop; avoid correlated positions; no revenge trading.</p>
+  </div>
+</section>
+
+<div class="footer">FX Weekly Trade Journal • Built around your A+ setup framework</div>
+</div>
+
+<script>
+const KEY='fx_weekly_journal_v1';
+let trades=JSON.parse(localStorage.getItem(KEY)||'[]');
+
+function showPage(id,btn){
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  btn.classList.add('active');
+  if(id==='week') renderWeek();
+  if(id==='review') renderReview();
+}
+function scoreFrom(t){
+  const weights={htf:20,structure:15,reaction:20,displacement:15,retest:10,rr:10,context:5,execution:5};
+  let s=0; for(const k in weights) if(t.check[k]) s+=weights[k];
+  let hardFail=false;
+  if(!t.check.htf || !t.check.rr || !t.check.execution) hardFail=true;
+  if(t.notes && /chase|chased|middle of range|prediction/i.test(t.notes)) hardFail=true;
+  if(hardFail) s=Math.min(s,64);
+  let grade=s>=85?'A+':s>=75?'A':s>=65?'B':'C';
+  return {s,grade};
+}
+function saveTrade(){
+  const file=document.getElementById('image').files[0];
+  const t={
+    id:Date.now(), date:document.getElementById('date').value || new Date().toISOString().slice(0,10),
+    pair:document.getElementById('pair').value.trim()||'Unknown', direction:document.getElementById('direction').value,
+    tf:document.getElementById('tf').value, result:parseFloat(document.getElementById('result').value)||0,
+    session:document.getElementById('session').value, notes:document.getElementById('notes').value.trim(),
+    check:{
+      htf:document.getElementById('htf').checked,structure:document.getElementById('structure').checked,
+      reaction:document.getElementById('reaction').checked,displacement:document.getElementById('displacement').checked,
+      retest:document.getElementById('retest').checked,rr:document.getElementById('rr').checked,
+      context:document.getElementById('context').checked,execution:document.getElementById('execution').checked
+    },
+    image:null
+  };
+  if(file){
+    const reader=new FileReader();
+    reader.onload=()=>{t.image=reader.result; trades.push(t); persist(); clearForm(); alert('Trade saved.');};
+    reader.readAsDataURL(file);
+  } else {trades.push(t);persist();clearForm();alert('Trade saved.');}
+}
+function persist(){localStorage.setItem(KEY,JSON.stringify(trades));}
+function clearForm(){
+  ['pair','result','notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('image').value='';
+  ['htf','structure','reaction','displacement','retest','rr','context','execution'].forEach(id=>document.getElementById(id).checked=false);
+}
+function renderWeek(){
+  document.getElementById('mTrades').textContent=trades.length;
+  const wins=trades.filter(t=>t.result>0).length;
+  document.getElementById('mWins').textContent=wins;
+  const r=trades.reduce((a,t)=>a+(Number(t.result)||0),0);
+  document.getElementById('mR').textContent=(r>=0?'+':'')+r.toFixed(1)+'R';
+  const el=document.getElementById('tradeList');
+  if(!trades.length){el.innerHTML='<div class="empty">No trades yet. Add your screenshots during the week.</div>';return;}
+  el.innerHTML=trades.slice().reverse().map(t=>{
+    const sc=scoreFrom(t);
+    return `<div class="card" style="margin:10px 0;background:#0e1729">
+      <div class="trade-card">
+        ${t.image?`<img class="thumb" src="${t.image}">`:`<div class="thumb"></div>`}
+        <div>
+          <h3>${esc(t.pair)} • ${t.direction} • ${t.tf}</h3>
+          <span class="pill">${esc(t.date)}</span><span class="pill">${esc(t.session)}</span>
+          <span class="pill ${t.result>0?'win':t.result<0?'loss':''}">${t.result>=0?'+':''}${Number(t.result).toFixed(1)}R</span>
+          <span class="pill">${sc.grade} (${sc.s}/100)</span>
+          <p>${esc(t.notes||'No notes added.')}</p>
+          <button class="danger" onclick="deleteTrade(${t.id})">Delete</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function renderReview(){
+  const el=document.getElementById('reviewList');
+  if(!trades.length){el.innerHTML='<div class="empty">No trades yet.</div>';drawPie({\"A+\":0,\"A\":0,\"B\":0,\"C\":0});return;}
+  el.innerHTML=trades.slice().reverse().map(t=>{
+    const sc=scoreFrom(t);
+    return `<div class="card" style="margin:10px 0;background:#0e1729">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><b>${esc(t.pair)} ${t.direction}</b><div class="hint">${esc(t.date)} • ${esc(t.tf)}</div></div>
+        <div class="score">${sc.s}<span class="hint">/100</span> <span class="grade">${sc.grade}</span></div>
+      </div>
+      <div style="margin-top:10px" class="bar"><span style="width:${sc.s}%"></span></div>
+      <p>Result: <b class="${t.result>0?'win':t.result<0?'loss':''}">${t.result>=0?'+':''}${Number(t.result).toFixed(1)}R</b></p>
+    </div>`;
+  }).join('');
+  const counts={\"A+\":0,\"A\":0,\"B\":0,\"C\":0};
+  trades.forEach(t=>counts[scoreFrom(t).grade]++);
+  drawPie(counts);
+  const total=trades.length, wins=trades.filter(t=>t.result>0).length;
+  const net=trades.reduce((a,t)=>a+Number(t.result||0),0);
+  const aplus=counts['A+'];
+  let verdict;
+  if(aplus/total>=0.6) verdict='Strong process week: most trades matched the A+ model. Protect this selectivity.';
+  else if(aplus/total>=0.4) verdict='Promising process week: keep the model, but become stricter about what qualifies as A+.';
+  else verdict='Review the lower-grade trades first. The goal is to remove B/C trades before trying to improve the strategy.';
+  document.getElementById('verdict').innerHTML=`<p><b>Trades:</b> ${total} &nbsp; <b>Win rate:</b> ${Math.round(wins/total*100)}% &nbsp; <b>Net:</b> ${net>=0?'+':''}${net.toFixed(1)}R</p><p>${verdict}</p>`;
+}
+function drawPie(counts){
+  const c=document.getElementById('pie'),ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  const vals=['A+','A','B','C'].map(k=>counts[k]||0), total=vals.reduce((a,b)=>a+b,0);
+  const cx=250,cy=235,r=150;
+  const colors=['#55d69b','#7c9cff','#ffd166','#ff6b7a'];
+  if(total===0){
+    ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle='#26334d';ctx.fill();
+    ctx.fillStyle='#eef3ff';ctx.font='bold 22px system-ui';ctx.textAlign='center';ctx.fillText('No trades yet',cx,cy);
+    document.getElementById('pieText').textContent='Add and score trades to see your real weekly distribution.';
+    return;
+  }
+  let a=-Math.PI/2;
+  ['A+','A','B','C'].forEach((k,i)=>{
+    const v=counts[k]||0;if(!v)return;
+    const ang=v/total*Math.PI*2;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a,a+ang);ctx.closePath();ctx.fillStyle=colors[i];ctx.fill();
+    a+=ang;
+  });
+  ctx.beginPath();ctx.arc(cx,cy,70,0,Math.PI*2);ctx.fillStyle='#121a2b';ctx.fill();
+  ctx.fillStyle='#eef3ff';ctx.font='bold 24px system-ui';ctx.textAlign='center';ctx.fillText(total+' trades',cx,cy+8);
+  let legend='';
+  ['A+','A','B','C'].forEach((k,i)=>{const pct=Math.round((counts[k]||0)/total*100);legend+=`<span class="pill">${k}: ${counts[k]||0} (${pct}%)</span>`;});
+  document.getElementById('pieText').innerHTML=legend;
+}
+function deleteTrade(id){if(confirm('Delete this trade?')){trades=trades.filter(t=>t.id!==id);persist();renderWeek();renderReview();}}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+document.getElementById('date').value=new Date().toISOString().slice(0,10);
+renderWeek();
+
+// PWA installation
+let deferredInstallPrompt = null;
+const installCard = document.getElementById('installCard');
+const installBtn = document.getElementById('installBtn');
+const installHint = document.getElementById('installHint');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  installCard.classList.add('show');
+});
+
+installBtn.addEventListener('click', async () => {
+  if (!deferredInstallPrompt) {
+    installHint.textContent = 'If your browser does not show the install prompt, use the browser menu and choose “Add to Home screen” or “Install app”.';
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  installCard.classList.remove('show');
+});
+
+window.addEventListener('appinstalled', () => {
+  installCard.classList.remove('show');
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+
+</script>
+</body>
+</html>
