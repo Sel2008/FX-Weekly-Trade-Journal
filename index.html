@@ -48,6 +48,14 @@
   .status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700}
   .status.open{background:#3b3218;color:var(--warn)} .status.closed{background:#153b30;color:var(--good)}
   .shot-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+  .trade-shots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+  .trade-shots figure{margin:0;min-width:0}
+  .trade-shots figcaption{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .trade-shots img{width:100%;height:220px;object-fit:contain;background:#080d18;border:1px solid var(--line);border-radius:10px}
+  .grade-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+  .grade-stat{padding:12px;background:#0b1324;border:1px solid var(--line);border-radius:12px}
+  .grade-stat b{display:block;font-size:18px}
+  @media(max-width:700px){.trade-shots{grid-template-columns:1fr}.trade-shots img{height:200px}.grade-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
   .shot-preview{width:100%;max-height:280px;object-fit:contain;background:#080d18;border:1px solid var(--line);border-radius:10px}
   .form-actions{margin-top:16px}
   button:disabled{opacity:.5;cursor:not-allowed}
@@ -133,6 +141,11 @@
     <div class="card"><div class="metric" id="mWins">0</div><small>Closed wins</small></div>
     <div class="card"><div class="metric" id="mR">0R</div><small>Closed net R</small></div>
   </div>
+  <div class="grid3">
+    <div class="card"><div class="metric" id="mAvgR">—</div><small>Average R per closed trade</small></div>
+    <div class="card"><div class="metric" id="mPF">—</div><small>Profit factor</small></div>
+    <div class="card"><div class="metric" id="mWinRate">—</div><small>Win rate</small></div>
+  </div>
   <div class="card">
     <div class="grid">
       <div><label>Filter by pair</label><input id="filterPair" placeholder="All pairs" oninput="renderWeek()"></div>
@@ -159,6 +172,11 @@
       <canvas id="pie" width="500" height="500"></canvas>
     </div>
     <p id="pieText" style="text-align:center"></p>
+  </div>
+  <div class="card">
+    <h2>Performance by setup grade</h2>
+    <p class="hint">Closed trades only. Average R and win rate help separate setup quality from individual outcomes. Profit factor = gross winning R ÷ absolute gross losing R.</p>
+    <div id="gradePerformance" class="grade-stats"></div>
   </div>
   <div class="card">
     <h2>Weekly verdict</h2>
@@ -278,11 +296,36 @@ async function recordResult(id){
   if(persist()){renderWeek();renderReview();}
 }
 function reopenTrade(id){const t=trades.find(x=>x.id===id);if(!t)return;if(!confirm('Reopen this trade to correct its result?'))return;t.status='OPEN';t.result=null;t.closedAt=null;if(persist()){renderWeek();renderReview();}}
+function editTrade(id){
+  const t=trades.find(x=>x.id===id);if(!t)return;
+  const date=prompt('Trade date (YYYY-MM-DD):',t.date||todayISO());if(date===null)return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){alert('Use date format YYYY-MM-DD.');return;}
+  const pair=prompt('Currency pair:',t.pair||'');if(pair===null)return;if(!pair.trim()){alert('Pair cannot be blank.');return;}
+  const direction=prompt('Direction (Long or Short):',t.direction||'Long');if(direction===null)return;
+  if(!['Long','Short'].includes(direction.trim())){alert('Direction must be Long or Short.');return;}
+  const tf=prompt('Entry timeframe (15M, 1H, 4H, 1D):',t.tf||'15M');if(tf===null)return;
+  if(!['15M','1H','4H','1D'].includes(tf.trim().toUpperCase())){alert('Use 15M, 1H, 4H, or 1D.');return;}
+  const session=prompt('Trading session:',t.session||'London');if(session===null)return;
+  const notes=prompt('Trade notes:',t.notes||'');if(notes===null)return;
+  t.date=date;t.pair=pair.trim().toUpperCase();t.direction=direction.trim();t.tf=tf.trim().toUpperCase();t.session=session.trim();t.notes=notes.trim();
+  if(persist()){renderWeek();renderReview();}
+}
+async function updateResultScreenshot(id){
+  const t=trades.find(x=>x.id===id);if(!t)return;
+  const input=$('result-file-'+id),file=input&&input.files[0];if(!file)return;
+  try{t.resultImage=await readImage(file);if(persist()){renderWeek();renderReview();}}
+  catch(e){alert(e.message||'Could not update screenshot.');}
+}
 function renderWeek(){
   const week=trades.filter(isThisWeek);
   const closed=week.filter(t=>t.status==='CLOSED'||(t.result!==null&&t.result!==undefined&&t.result!==''&&Number.isFinite(Number(t.result))));
   $('mTrades').textContent=week.length;$('mWins').textContent=closed.filter(t=>Number(t.result)>0).length;
   const net=closed.reduce((a,t)=>a+(Number(t.result)||0),0);$('mR').textContent=(net>=0?'+':'')+net.toFixed(1)+'R';
+  const grossWins=closed.reduce((a,t)=>a+Math.max(0,Number(t.result)||0),0);
+  const grossLosses=Math.abs(closed.reduce((a,t)=>a+Math.min(0,Number(t.result)||0),0));
+  $('mAvgR').textContent=closed.length?((net/closed.length>=0?'+':'')+(net/closed.length).toFixed(2)+'R'):'—';
+  $('mPF').textContent=closed.length?(grossLosses>0?(grossWins/grossLosses).toFixed(2):(grossWins>0?'∞':'—')):'—';
+  $('mWinRate').textContent=closed.length?Math.round(closed.filter(t=>Number(t.result)>0).length/closed.length*100)+'%':'—';
   const pairFilter=($('filterPair')?.value||'').trim().toLowerCase(),statusFilter=$('filterStatus')?.value||'all';
   const filtered=trades.filter(t=>(!pairFilter||String(t.pair).toLowerCase().includes(pairFilter))&&(statusFilter==='all'||(statusFilter==='open'?(t.status!=='CLOSED'&&(t.result===null||t.result===undefined||t.result==='')):(t.status==='CLOSED'||(t.result!==null&&t.result!==undefined&&t.result!=='')))));
   const el=$('tradeList');
@@ -291,19 +334,22 @@ function renderWeek(){
     const sc=scoreFrom(t),closed=t.status==='CLOSED'||(t.result!==null&&t.result!==undefined&&t.result!==''&&Number.isFinite(Number(t.result)));
     const result=closed?((Number(t.result)>=0?'+':'')+Number(t.result).toFixed(1)+'R'):'Awaiting result';
     const setup=t.setupImage||t.image;
+    const resultShot=t.resultImage||'';
     return `<div class="card" style="margin:10px 0;background:#0e1729">
-      <div class="trade-card">
-        ${setup?`<img class="thumb" src="${setup}" alt="Setup screenshot">`:'<div class="thumb"></div>'}
-        <div>
+      <div>
+        <div class="trade-shots">
+          <figure>${setup?`<figcaption>Setup (before outcome)</figcaption><img src="${setup}" alt="Setup screenshot">`:'<figcaption>Setup screenshot</figcaption><div class="empty">No setup screenshot</div>'}</figure>
+          <figure>${resultShot?`<figcaption>Result (after close)</figcaption><img src="${resultShot}" alt="Result screenshot">`:'<figcaption>Result screenshot</figcaption><div class="empty">Not added yet</div>'}</figure>
+        </div>
           <h3>${esc(t.pair)} • ${esc(t.direction)} • ${esc(t.tf)}</h3>
           <span class="pill">${esc(t.date||'')}</span><span class="pill">${esc(t.session||'')}</span>
           <span class="status ${closed?'closed':'open'}">${closed?'CLOSED':'OPEN'}</span>
           <span class="pill ${closed?(Number(t.result)>0?'win':Number(t.result)<0?'loss':''):''}">${result}</span>
           <span class="pill">${sc.grade} (${sc.s}/100)</span>
           <p>${esc(t.notes||'No notes added.')}</p>
-          ${t.resultImage?`<p><b>Result screenshot</b></p><img class="shot-preview" src="${t.resultImage}" alt="Result screenshot">`:''}
           <div class="row" style="margin-top:10px;align-items:center">
             ${!closed?`<label style="margin:0;flex:1;min-width:150px">Result screenshot (optional)<input id="result-file-${t.id}" type="file" accept="image/*" capture="environment"></label><button class="primary" onclick="recordResult(${t.id})">Record Result</button>`:`<button class="secondary" onclick="reopenTrade(${t.id})">Correct Result</button>`}
+            <button class="secondary" onclick="editTrade(${t.id})">Edit Trade</button>
             <button class="danger" onclick="deleteTrade(${t.id})">Delete</button>
           </div>
         </div>
@@ -328,6 +374,18 @@ function renderReview(){
   }).join('');
   const counts={'A+':0,'A':0,'B':0,'C':0};week.forEach(t=>counts[scoreFrom(t).grade]++);drawPie(counts);
   const wins=closed.filter(t=>Number(t.result)>0).length,net=closed.reduce((a,t)=>a+(Number(t.result)||0),0);
+  const grossWins=closed.reduce((a,t)=>a+Math.max(0,Number(t.result)||0),0);
+  const grossLosses=Math.abs(closed.reduce((a,t)=>a+Math.min(0,Number(t.result)||0),0));
+  const avgR=closed.length?net/closed.length:null;
+  const pf=grossLosses>0?grossWins/grossLosses:(grossWins>0?Infinity:null);
+  const gradeKeys=['A+','A','B','C'];
+  $('gradePerformance').innerHTML=gradeKeys.map(g=>{
+    const group=closed.filter(t=>scoreFrom(t).grade===g);
+    const gWins=group.filter(t=>Number(t.result)>0).length;
+    const gNet=group.reduce((a,t)=>a+(Number(t.result)||0),0);
+    const gAvg=group.length?gNet/group.length:null;
+    return `<div class="grade-stat"><span class="hint">${g} grade</span><b>${group.length?((gAvg>=0?'+':'')+gAvg.toFixed(2)+'R'):'—'}</b><span class="hint">${group.length?group.length+' closed • '+Math.round(gWins/group.length*100)+'% win':'No closed trades'}</span></div>`;
+  }).join('');
   let verdict;
   if(!week.length)verdict='No trades logged this week yet.';
   else if(!closed.length)verdict='Your setups are recorded, but no results have been entered this week. Record results after trades close for a meaningful performance review.';
