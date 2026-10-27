@@ -174,6 +174,16 @@
     <p id="pieText" style="text-align:center"></p>
   </div>
   <div class="card">
+    <h2>Trade quality: good vs bad outcomes</h2>
+    <p>The journal separates process quality from profit. It compares each week's closed trades with up to the 20 most recent earlier closed trades, so older history gradually loses influence. Small samples are marked as inconclusive rather than treated as a proven pattern.</p>
+    <div id="outcomeQuality"></div>
+  </div>
+  <div class="card">
+    <h2>Patterns appearing in winners and losers</h2>
+    <p class="hint">Based on your setup checklist. These are observed associations in your journal, not proof that any one factor causes a win.</p>
+    <div id="patternInsights"></div>
+  </div>
+  <div class="card">
     <h2>Performance by setup grade</h2>
     <p class="hint">Closed trades only. Average R and win rate help separate setup quality from individual outcomes. Profit factor = gross winning R ÷ absolute gross losing R.</p>
     <div id="gradePerformance" class="grade-stats"></div>
@@ -357,10 +367,77 @@ function renderWeek(){
     </div>`;
   }).join('');
 }
+const FEATURE_LABELS={htf:'Meaningful HTF level',structure:'Clean structure / compression',reaction:'Clear reaction / rejection',displacement:'Strong displacement',retest:'Clean retest / entry',rr:'At least 1.5R planned',context:'Good market context',execution:'Disciplined execution'};
+function isClosedTrade(t){return t.status==='CLOSED'||(t.result!==null&&t.result!==undefined&&t.result!==''&&Number.isFinite(Number(t.result)));}
+function tradeWon(t){return Number(t.result)>0;}
+function recentClosed(excludeId=null,limit=20){
+  return trades.filter(t=>isClosedTrade(t)&&String(t.id)!==String(excludeId))
+    .sort((a,b)=>String(b.closedAt||b.date||'').localeCompare(String(a.closedAt||a.date||'')))
+    .slice(0,limit);
+}
+function featureRates(reference){
+  const out={};
+  Object.keys(FEATURE_LABELS).forEach(k=>{
+    const present=reference.filter(t=>!!(t.check||{})[k]);
+    const absent=reference.filter(t=>!(t.check||{})[k]);
+    out[k]={presentN:present.length,presentWin:present.length?present.filter(tradeWon).length/present.length:null,
+      absentN:absent.length,absentWin:absent.length?absent.filter(tradeWon).length/absent.length:null};
+  });
+  return out;
+}
+function patternFit(t,reference){
+  if(reference.length<5)return {known:false,score:null,matched:0,details:[]};
+  const rates=featureRates(reference),base=reference.filter(tradeWon).length/reference.length;
+  const checks=t.check||{},details=[];
+  Object.keys(FEATURE_LABELS).forEach(k=>{
+    const rate=rates[k],yes=!!checks[k],n=yes?rate.presentN:rate.absentN,win=yes?rate.presentWin:rate.absentWin;
+    if(n>=3&&win!==null)details.push({key:k,label:FEATURE_LABELS[k],yes,n,win,lift:win-base});
+  });
+  if(details.length<3)return {known:false,score:null,matched:details.length,details,base};
+  const score=details.reduce((a,d)=>a+d.lift,0)/details.length;
+  return {known:true,score,matched:details.length,details,base};
+}
+function classifyTradeQuality(t){
+  const reference=recentClosed(t.id,20),fit=patternFit(t,reference),sc=scoreFrom(t),won=tradeWon(t);
+  if(reference.length<5||!fit.known)return {label:'Not enough evidence yet',tone:'warn',reason:'Need at least 5 earlier closed trades and enough repeated checklist observations before comparing this trade with your own winner/loser patterns.',fit,sc,won};
+  const processGood=sc.s>=75;
+  const patternGood=fit.score>=0;
+  if(won&&processGood&&patternGood)return {label:'Good win',tone:'win',reason:'Profit, setup discipline and the available recent pattern evidence point in the same direction.',fit,sc,won};
+  if(won)return {label:'Bad win / caution',tone:'warn',reason:!processGood?'It made money, but the setup score or hard-fail rules flag weak process. Treat the profit as luck until the process improves.':'It made money, but its checklist pattern is weaker than your recent winning baseline. Do not assume this is a repeatable edge.',fit,sc,won};
+  if(!won&&processGood&&patternGood)return {label:'Good loss',tone:'win',reason:'The trade lost, but it followed your rules and its checklist pattern is consistent with recent winners. A valid loss is part of trading.',fit,sc,won};
+  if(!won)return {label:'Bad loss / review',tone:'loss',reason:!processGood?'The loss came with weak process or a hard-fail flag. Review the rule breach before reviewing the market.':'The process score is reasonable, but the setup features do not match your recent winning pattern strongly enough. Review it; do not call it a good loss yet.',fit,sc,won};
+}
+function renderOutcomeQuality(week){
+  const el=$('outcomeQuality');if(!el)return;
+  const closed=week.filter(isClosedTrade);
+  if(!closed.length){el.innerHTML='<div class="empty">Record closed-trade R results to classify outcomes. Open trades are never labelled winners or losers.</div>';return;}
+  const counts={'Good win':0,'Bad win / caution':0,'Good loss':0,'Bad loss / review':0,'Not enough evidence yet':0};
+  const cards=closed.slice().sort((a,b)=>String(b.closedAt||b.date||'').localeCompare(String(a.closedAt||a.date||''))).map(t=>{
+    const q=classifyTradeQuality(t);counts[q.label]=(counts[q.label]||0)+1;
+    const r=Number(t.result),result=(r>=0?'+':'')+r.toFixed(1)+'R';
+    return `<div class="card" style="margin:10px 0;background:#0e1729"><div class="row" style="justify-content:space-between;align-items:center"><div><b>${esc(t.pair)} • ${esc(t.direction)} • ${esc(t.date||'')}</b><div class="hint">${result} • ${q.sc.grade} (${q.sc.s}/100)</div></div><span class="pill ${q.tone}">${q.label}</span></div><p>${q.reason}</p>${q.fit.known?`<p class="hint">Pattern alignment: ${q.fit.score>=0?'+':''}${(q.fit.score*100).toFixed(1)} percentage points versus the reference baseline, across ${q.fit.matched} observed checklist factors. Reference: ${recentClosed(t.id,20).length} earlier trades.</p>`:''}</div>`;
+  }).join('');
+  el.innerHTML='<div class="grade-stats">'+Object.entries(counts).map(([k,v])=>`<div class="grade-stat"><span class="hint">${k}</span><b>${v}</b></div>`).join('')+'</div>'+cards;
+}
+function renderPatternInsights(){
+  const el=$('patternInsights');if(!el)return;
+  const reference=recentClosed(null,20);
+  if(reference.length<5){el.innerHTML=`<div class="empty">Building your personal evidence base: ${reference.length}/5 recent closed trades available. Keep logging setups and final R outcomes. The journal will not pretend to know your edge before there is enough data.</div>`;return;}
+  const base=reference.filter(tradeWon).length/reference.length,rates=featureRates(reference);
+  const ranked=Object.keys(FEATURE_LABELS).map(k=>({key:k,label:FEATURE_LABELS[k],...rates[k]}))
+    .filter(x=>x.presentN>=3&&x.absentN>=3&&x.presentWin!==null&&x.absentWin!==null)
+    .map(x=>({...x,lift:x.presentWin-x.absentWin})).sort((a,b)=>Math.abs(b.lift)-Math.abs(a.lift));
+  const winnerTrades=reference.filter(tradeWon),loserTrades=reference.filter(t=>!tradeWon(t));
+  const common=(arr)=>Object.keys(FEATURE_LABELS).map(k=>({key:k,label:FEATURE_LABELS[k],n:arr.filter(t=>!!(t.check||{})[k]).length})).sort((a,b)=>(b.n/Math.max(1,arr.length))-(a.n/Math.max(1,arr.length))).slice(0,3);
+  const commonW=common(winnerTrades),commonL=common(loserTrades);
+  const factorRows=ranked.length?ranked.slice(0,5).map(x=>`<div class="card" style="margin:8px 0;background:#0e1729"><b>${x.label}</b><p class="hint">With factor: ${Math.round(x.presentWin*100)}% wins (${x.presentN} trades); without: ${Math.round(x.absentWin*100)}% (${x.absentN} trades). Difference: <b class="${x.lift>=0?'win':'loss'}">${x.lift>=0?'+':''}${Math.round(x.lift*100)} percentage points</b>.</p></div>`).join(''):'<p>Not enough repeated observations per factor yet. More closed trades will make the comparison more useful.</p>';
+  el.innerHTML=`<p><b>Recent reference:</b> ${reference.length} closed trades • ${Math.round(base*100)}% win rate • newest trades weighted by the rolling window (older trades fall out as new trades close).</p><div class="grid"><div><h3>Most common in winners (${winnerTrades.length})</h3><p>${winnerTrades.length?commonW.map(x=>`<span class="pill">${x.label}: ${x.n}/${winnerTrades.length}</span>`).join(''):'No winning trades in this sample yet.'}</p></div><div><h3>Most common in losers (${loserTrades.length})</h3><p>${loserTrades.length?commonL.map(x=>`<span class="pill">${x.label}: ${x.n}/${loserTrades.length}</span>`).join(''):'No losing trades in this sample yet.'}</p></div></div><h3>Factors with the clearest win-rate difference</h3>${factorRows}`;
+}
 function renderReview(){
   const el=$('reviewList');
   if(!trades.length){el.innerHTML='<div class="empty">No trades yet.</div>';drawPie({'A+':0,'A':0,'B':0,'C':0});$('verdict').textContent='Log trades and score them to generate your review.';return;}
   const week=trades.filter(isThisWeek),closed=week.filter(t=>t.status==='CLOSED'||(t.result!==null&&t.result!==undefined&&t.result!==''&&Number.isFinite(Number(t.result))));
+  renderOutcomeQuality(week);renderPatternInsights();
   el.innerHTML=trades.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(t=>{
     const sc=scoreFrom(t),isClosed=t.status==='CLOSED'||(t.result!==null&&t.result!==undefined&&t.result!==''&&Number.isFinite(Number(t.result)));
     return `<div class="card" style="margin:10px 0;background:#0e1729">
