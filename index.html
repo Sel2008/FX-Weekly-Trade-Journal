@@ -250,7 +250,7 @@ function renderWeek(){
 }
 function renderReview(){
   const el=document.getElementById('reviewList');
-  if(!trades.length){el.innerHTML='<div class="empty">No trades yet.</div>';drawPie({\"A+\":0,\"A\":0,\"B\":0,\"C\":0});return;}
+  if(!trades.length){el.innerHTML='<div class="empty">No trades yet.</div>';drawPie({'A+':0,'A':0,'B':0,'C':0});return;}
   el.innerHTML=trades.slice().reverse().map(t=>{
     const sc=scoreFrom(t);
     return `<div class="card" style="margin:10px 0;background:#0e1729">
@@ -262,7 +262,7 @@ function renderReview(){
       <p>Result: <b class="${t.result>0?'win':t.result<0?'loss':''}">${t.result>=0?'+':''}${Number(t.result).toFixed(1)}R</b></p>
     </div>`;
   }).join('');
-  const counts={\"A+\":0,\"A\":0,\"B\":0,\"C\":0};
+  const counts={'A+':0,'A':0,'B':0,'C':0};
   trades.forEach(t=>counts[scoreFrom(t).grade]++);
   drawPie(counts);
   const total=trades.length, wins=trades.filter(t=>t.result>0).length;
