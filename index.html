@@ -154,6 +154,21 @@
     <p class="hint">Statistics above use the current Monday–Sunday week. Older trades remain available in the list and review.</p>
   </div>
   <div class="card">
+    <h2>Weekly profit progress</h2>
+    <p>Manually record the percentage result for each trading week. This is separate from individual trade results and is never calculated automatically.</p>
+    <div class="grid">
+      <div><label for="weeklyLabel">Week label</label><input id="weeklyLabel" placeholder="e.g. Week 1"></div>
+      <div><label for="weeklyPercent">Weekly profit / loss (%)</label><input id="weeklyPercent" type="number" step="0.01" placeholder="e.g. 3 or -1"></div>
+    </div>
+    <div style="margin-top:12px"><label for="weeklyNote">Optional note</label><input id="weeklyNote" placeholder="e.g. followed my plan"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" type="button" onclick="saveWeeklyProgress()">Save Week</button>
+      <button class="secondary" type="button" onclick="clearWeeklyProgressForm()">Clear</button>
+    </div>
+    <p class="hint" id="weeklyProgressStatus" aria-live="polite"></p>
+    <div id="weeklyProgressList"></div>
+  </div>
+  <div class="card">
     <h2>Week's trades</h2>
     <div id="tradeList"></div>
   </div>
@@ -234,6 +249,10 @@
 
 <script>
 const KEY='fx_weekly_journal_v1';
+const WEEKLY_PROGRESS_KEY='fx_weekly_manual_progress_v1';
+let weeklyProgress=[];
+let editingWeeklyProgressId=null;
+try { const savedWeeks=JSON.parse(localStorage.getItem(WEEKLY_PROGRESS_KEY)||'[]'); weeklyProgress=Array.isArray(savedWeeks)?savedWeeks:[]; } catch(e) { console.error('Weekly progress could not be read',e); weeklyProgress=[]; }
 let trades=[];
 try { const stored=JSON.parse(localStorage.getItem(KEY)||'[]'); trades=Array.isArray(stored)?stored:[]; } catch(e) { console.error('Journal data could not be read',e); trades=[]; }
 const $=id=>document.getElementById(id);
@@ -261,6 +280,63 @@ function scoreFrom(t){
 function persist(){
   try { localStorage.setItem(KEY,JSON.stringify(trades)); return true; }
   catch(e){ alert('Could not save all journal data. Browser storage may be full, often because screenshots are too large. Export a backup and try smaller screenshots.'); console.error(e); return false; }
+}
+function persistWeeklyProgress(){
+  try { localStorage.setItem(WEEKLY_PROGRESS_KEY,JSON.stringify(weeklyProgress)); return true; }
+  catch(e){ alert('Could not save weekly progress in this browser. Export a journal backup and free browser storage space.'); console.error(e); return false; }
+}
+function clearWeeklyProgressForm(){
+  editingWeeklyProgressId=null;
+  $('weeklyLabel').value='';
+  $('weeklyPercent').value='';
+  $('weeklyNote').value='';
+  $('weeklyProgressStatus').textContent='';
+  const btn=document.querySelector('button[onclick="saveWeeklyProgress()"]');
+  if(btn)btn.textContent='Save Week';
+}
+function saveWeeklyProgress(){
+  const label=$('weeklyLabel').value.trim();
+  const raw=$('weeklyPercent').value.trim();
+  const percent=Number(raw);
+  if(!label){$('weeklyProgressStatus').textContent='Enter a week label, such as Week 1.';$('weeklyLabel').focus();return;}
+  if(raw===''||!Number.isFinite(percent)){$('weeklyProgressStatus').textContent='Enter the weekly percentage, e.g. 3 for +3% or -1 for −1%.';$('weeklyPercent').focus();return;}
+  const before=weeklyProgress.slice();
+  if(editingWeeklyProgressId!==null){
+    weeklyProgress=weeklyProgress.map(w=>w.id===editingWeeklyProgressId?{...w,label,percent,note:$('weeklyNote').value.trim(),updatedAt:new Date().toISOString()}:w);
+  }else{
+    weeklyProgress.push({id:Date.now(),label,percent,note:$('weeklyNote').value.trim(),createdAt:new Date().toISOString()});
+  }
+  if(persistWeeklyProgress()){
+    clearWeeklyProgressForm();
+    renderWeeklyProgress();
+    $('weeklyProgressStatus').textContent='Weekly result saved.';
+  }else weeklyProgress=before;
+}
+function editWeeklyProgress(id){
+  const w=weeklyProgress.find(x=>x.id===id);if(!w)return;
+  editingWeeklyProgressId=id;
+  $('weeklyLabel').value=w.label;
+  $('weeklyPercent').value=String(w.percent);
+  $('weeklyNote').value=w.note||'';
+  const btn=document.querySelector('button[onclick="saveWeeklyProgress()"]');
+  if(btn)btn.textContent='Update Week';
+  $('weeklyProgressStatus').textContent='Editing '+w.label+'. Save to apply your changes.';
+  $('week').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function deleteWeeklyProgress(id){
+  const w=weeklyProgress.find(x=>x.id===id);if(!w)return;
+  if(!confirm('Delete the weekly progress entry "'+w.label+'"?'))return;
+  const before=weeklyProgress;
+  weeklyProgress=weeklyProgress.filter(x=>x.id!==id);
+  if(persistWeeklyProgress()){renderWeeklyProgress();clearWeeklyProgressForm();}else weeklyProgress=before;
+}
+function renderWeeklyProgress(){
+  const el=$('weeklyProgressList');if(!el)return;
+  if(!weeklyProgress.length){el.innerHTML='<div class="empty">No weekly results saved yet. Add your first entry above, e.g. Week 1: +3%.</div>';return;}
+  el.innerHTML=weeklyProgress.slice().sort((a,b)=>a.id-b.id).map(w=>{
+    const p=Number(w.percent),shown=(p>0?'+':'')+p.toFixed(2)+'%';
+    return '<div class="card" style="margin:10px 0;background:#0e1729"><div class="row" style="justify-content:space-between;align-items:center"><div><b>'+esc(w.label)+'</b><div class="metric '+(p>0?'win':p<0?'loss':'')+'">'+shown+'</div>'+(w.note?'<p class="hint">'+esc(w.note)+'</p>':'')+'</div><div class="row"><button type="button" class="secondary" onclick="editWeeklyProgress('+w.id+')">Edit</button><button type="button" class="danger" onclick="deleteWeeklyProgress('+w.id+')">Delete</button></div></div></div>';
+  }).join('');
 }
 function readImage(file){
   return new Promise((resolve,reject)=>{
@@ -548,7 +624,7 @@ function importJournal(event){
     }catch(e){alert('Could not import backup: '+e.message);}finally{$('importFile').value='';}
   };reader.readAsText(file);
 }
-$('date').value=todayISO();renderWeek();
+$('date').value=todayISO();renderWeek();renderWeeklyProgress();
 
 // PWA installation
 let deferredInstallPrompt = null;
