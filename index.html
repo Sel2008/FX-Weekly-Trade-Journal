@@ -611,16 +611,32 @@ function drawPie(counts){
 function deleteTrade(id){if(confirm('Delete this trade and its screenshots?')){trades=trades.filter(t=>t.id!==id);if(persist()){renderWeek();renderReview();}}}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 function exportJournal(){
-  const blob=new Blob([JSON.stringify({app:'FX Weekly Trade Journal',version:2,exportedAt:new Date().toISOString(),trades},null,2)],{type:'application/json'});
+  const blob=new Blob([JSON.stringify({app:'FX Weekly Trade Journal',version:3,exportedAt:new Date().toISOString(),trades,weeklyProgress},null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='fx-journal-backup-'+todayISO()+'.json';a.click();URL.revokeObjectURL(url);
 }
 function importJournal(event){
   const file=event.target.files&&event.target.files[0];if(!file)return;
   const reader=new FileReader();reader.onload=()=>{
-    try{const data=JSON.parse(reader.result),incoming=Array.isArray(data)?data:data.trades;if(!Array.isArray(incoming))throw new Error('This file does not contain journal trades.');
-      if(!confirm('Import '+incoming.length+' trades? Existing trades with matching IDs will be replaced; other trades are kept.'))return;
-      const map=new Map(trades.map(t=>[String(t.id),t]));incoming.forEach(t=>{if(t&&t.id!==undefined)map.set(String(t.id),t);});
-      const before=trades;trades=Array.from(map.values());if(persist()){renderWeek();renderReview();alert('Backup imported.');}else trades=before;
+    try{
+      const data=JSON.parse(reader.result),incoming=Array.isArray(data)?data:data.trades;
+      if(!Array.isArray(incoming))throw new Error('This file does not contain journal trades.');
+      const incomingWeeks=!Array.isArray(data)?data.weeklyProgress:null;
+      if(!confirm('Import '+incoming.length+' trades'+(incomingWeeks?' and '+incomingWeeks.length+' weekly progress entries':'')+'? Existing records with matching IDs will be replaced; other records are kept.'))return;
+      const tradeMap=new Map(trades.map(t=>[String(t.id),t]));
+      incoming.forEach(t=>{if(t&&t.id!==undefined)tradeMap.set(String(t.id),t);});
+      const beforeTrades=trades,beforeWeeks=weeklyProgress;
+      trades=Array.from(tradeMap.values());
+      if(incomingWeeks){
+        const weekMap=new Map(weeklyProgress.map(w=>[String(w.id),w]));
+        incomingWeeks.forEach(w=>{if(w&&w.id!==undefined)weekMap.set(String(w.id),w);});
+        weeklyProgress=Array.from(weekMap.values());
+      }
+      if(persist()&&(!incomingWeeks||persistWeeklyProgress())){
+        renderWeek();renderWeeklyProgress();renderReview();alert('Backup imported.');
+      }else{
+        trades=beforeTrades;weeklyProgress=beforeWeeks;
+        throw new Error('Could not save imported records. Check browser storage space and try again.');
+      }
     }catch(e){alert('Could not import backup: '+e.message);}finally{$('importFile').value='';}
   };reader.readAsText(file);
 }
